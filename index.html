@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Cosechas · CAS</title>
+<title>Cosechas · H</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -608,6 +608,7 @@ let state = {
   despachoResumenChartType: "bar",
   despachoResumenChartGroup: "cliente",
   despachoResumenTipo: "todos", // todos | cosecha | aserrinco — para no mezclar sus productos
+  despachoResumenMetrica: "conteo", // conteo (# despachos) | cantidad (toneladas/unidades)
 };
 
 onSnapshot(
@@ -1199,9 +1200,20 @@ function exportResumenChartImage(){
    GRÁFICOS DE DESPACHOS (independientes de los de Cosecha,
    para que nunca se mezclen los datos de ambas secciones)
    ========================================================= */
-// Número de despachos dentro de un rango (y de un tipo específico, si se pide),
-// agrupados por cliente, producto o tipo
-function getDespachoGroupData(desde, hasta, groupKey, tipoFiltro){
+// Devuelve el valor de un despacho según la métrica elegida:
+// "conteo" = 1 por despacho, "cantidad" = sus toneladas (cosecha) o unidades (aserrinco)
+function despachoValor(d, metrica){
+  if(metrica!=="cantidad") return 1;
+  return d.tipo==="cosecha" ? (Number(d.toneladas)||0) : (Number(d.unidades)||0);
+}
+function despachoUnidadLabel(tipoFiltro, metrica){
+  if(metrica!=="cantidad") return "despacho";
+  return tipoFiltro==="cosecha" ? "t" : "u";
+}
+
+// Total dentro de un rango (y de un tipo específico, si se pide), agrupado
+// por cliente, producto o tipo — según conteo de despachos o su cantidad
+function getDespachoGroupData(desde, hasta, groupKey, tipoFiltro, metrica){
   let despachos = state.despachos.filter(d=>d.fecha>=desde && d.fecha<=hasta);
   if(tipoFiltro && tipoFiltro!=="todos") despachos = despachos.filter(d=>d.tipo===tipoFiltro);
   const keyFn = groupKey==="tipo"
@@ -1210,14 +1222,14 @@ function getDespachoGroupData(desde, hasta, groupKey, tipoFiltro){
   const map = new Map();
   despachos.forEach(d=>{
     const k = keyFn(d) || "—";
-    map.set(k, (map.get(k)||0) + 1);
+    map.set(k, (map.get(k)||0) + despachoValor(d, metrica));
   });
   return [...map.entries()].sort((a,b)=>b[1]-a[1]).map(([label,value])=>({label, value}));
 }
 
-// Número de despachos por día (de un tipo específico, si se pide). En modo
-// "día" muestra los últimos 7 días; en semana/mes/rango, cada día del periodo.
-function getDespachoTrendData(modo, fecha, desde, hasta, tipoFiltro){
+// Total por día (de un tipo específico, si se pide). En modo "día" muestra
+// los últimos 7 días; en semana/mes/rango, cada día del periodo.
+function getDespachoTrendData(modo, fecha, desde, hasta, tipoFiltro, metrica){
   let dias;
   if(modo==="dia"){
     const end = new Date(fecha+"T00:00:00");
@@ -1229,8 +1241,9 @@ function getDespachoTrendData(modo, fecha, desde, hasta, tipoFiltro){
   return dias.map(key=>{
     let delDia = state.despachos.filter(d=>d.fecha===key);
     if(tipoFiltro && tipoFiltro!=="todos") delDia = delDia.filter(d=>d.tipo===tipoFiltro);
+    const total = delDia.reduce((a,d)=>a+despachoValor(d, metrica), 0);
     const [y,m,d] = key.split("-");
-    return { label: `${d}/${m}`, value: delDia.length };
+    return { label: `${d}/${m}`, value: total };
   });
 }
 
@@ -1243,14 +1256,16 @@ function drawDespachoResumenChart(){
   const [desde,hasta] = computeDateRange(state.despachoResumenModo, state.despachoResumenFecha, state.despachoResumenMes, state.despachoResumenRangoInicio, state.despachoResumenRangoFin);
   const type = state.despachoResumenChartType; // bar | pie | line
   const tipoFiltro = state.despachoResumenTipo;
+  const metrica = tipoFiltro==="todos" ? "conteo" : state.despachoResumenMetrica;
+  const unidad = despachoUnidadLabel(tipoFiltro, metrica);
   let labels, data;
 
   if(type === "line"){
-    const trend = getDespachoTrendData(state.despachoResumenModo, state.despachoResumenFecha, desde, hasta, tipoFiltro);
+    const trend = getDespachoTrendData(state.despachoResumenModo, state.despachoResumenFecha, desde, hasta, tipoFiltro, metrica);
     labels = trend.map(t=>t.label);
     data = trend.map(t=>t.value);
   } else {
-    const grouped = getDespachoGroupData(desde, hasta, state.despachoResumenChartGroup, tipoFiltro);
+    const grouped = getDespachoGroupData(desde, hasta, state.despachoResumenChartGroup, tipoFiltro, metrica);
     labels = grouped.map(g=>g.label);
     data = grouped.map(g=>g.value);
   }
@@ -1267,7 +1282,7 @@ function drawDespachoResumenChart(){
     data: {
       labels,
       datasets: [{
-        label: "Despachos",
+        label: metrica==="cantidad" ? (tipoFiltro==="cosecha"?"Toneladas":"Unidades") : "Despachos",
         data,
         backgroundColor: chartType==="line" ? "rgba(181,116,26,.15)" : labels.map((_,i)=>palette[i % palette.length]),
         borderColor: chartType==="line" ? accent : "#fff",
@@ -1284,10 +1299,13 @@ function drawDespachoResumenChart(){
       maintainAspectRatio:false,
       plugins: {
         legend: { display: chartType==="doughnut", position:"bottom", labels:{ font:{family:"'Public Sans'", size:11}, color: ink, boxWidth:12, padding:14 } },
-        tooltip: { callbacks: { label: (ctx)=> ` ${ctx.label}: ${fmtNum(ctx.parsed.y ?? ctx.parsed)} despacho${(ctx.parsed.y ?? ctx.parsed)===1?"":"s"}` } },
+        tooltip: { callbacks: { label: (ctx)=>{
+          const v = ctx.parsed.y ?? ctx.parsed;
+          return metrica==="cantidad" ? ` ${ctx.label}: ${fmtNum(v)} ${unidad}` : ` ${ctx.label}: ${fmtNum(v)} despacho${v===1?"":"s"}`;
+        } } },
       },
       scales: chartType==="doughnut" ? {} : {
-        y: { beginAtZero:true, ticks:{ stepSize:1, color: inkSoft, font:{family:"'JetBrains Mono'", size:10} }, grid:{ color: line } },
+        y: { beginAtZero:true, ticks:{ stepSize: metrica==="cantidad"? undefined : 1, color: inkSoft, font:{family:"'JetBrains Mono'", size:10} }, grid:{ color: line } },
         x: { ticks:{ color: inkSoft, font:{family:"'Public Sans'", size:10} }, grid:{ display:false } },
       }
     }
@@ -1298,19 +1316,21 @@ function exportDespachoChartCSV(){
   const [desde,hasta] = computeDateRange(state.despachoResumenModo, state.despachoResumenFecha, state.despachoResumenMes, state.despachoResumenRangoInicio, state.despachoResumenRangoFin);
   const type = state.despachoResumenChartType;
   const tipoFiltro = state.despachoResumenTipo;
+  const metrica = tipoFiltro==="todos" ? "conteo" : state.despachoResumenMetrica;
+  const valorLabel = metrica==="cantidad" ? (tipoFiltro==="cosecha"?"Toneladas":"Unidades") : "Despachos";
   let headers, rows, filename;
 
   if(type === "line"){
-    const trend = getDespachoTrendData(state.despachoResumenModo, state.despachoResumenFecha, desde, hasta, tipoFiltro);
-    headers = ["Fecha","Despachos"];
+    const trend = getDespachoTrendData(state.despachoResumenModo, state.despachoResumenFecha, desde, hasta, tipoFiltro, metrica);
+    headers = ["Fecha",valorLabel];
     rows = [headers, ...trend.map(t=>[t.label, t.value])];
-    filename = `despachos_${tipoFiltro}_tendencia_${desde}_a_${hasta}.csv`;
+    filename = `despachos_${tipoFiltro}_${metrica}_tendencia_${desde}_a_${hasta}.csv`;
   } else {
     const groupLabel = state.despachoResumenChartGroup==="cliente" ? "Cliente" : state.despachoResumenChartGroup==="producto" ? "Producto" : "Tipo";
-    const grouped = getDespachoGroupData(desde, hasta, state.despachoResumenChartGroup, tipoFiltro);
-    headers = [groupLabel, "Despachos"];
+    const grouped = getDespachoGroupData(desde, hasta, state.despachoResumenChartGroup, tipoFiltro, metrica);
+    headers = [groupLabel, valorLabel];
     rows = [headers, ...grouped.map(g=>[g.label, g.value])];
-    filename = `despachos_${tipoFiltro}_${state.despachoResumenChartGroup}_${desde}_a_${hasta}.csv`;
+    filename = `despachos_${tipoFiltro}_${metrica}_${state.despachoResumenChartGroup}_${desde}_a_${hasta}.csv`;
   }
 
   if(rows.length<=1){ toast("No hay datos para exportar"); return; }
@@ -1320,10 +1340,11 @@ function exportDespachoChartCSV(){
 function exportDespachoChartImage(){
   if(!despachoChartInstance){ toast("No hay gráfico para exportar"); return; }
   const [desde,hasta] = computeDateRange(state.despachoResumenModo, state.despachoResumenFecha, state.despachoResumenMes, state.despachoResumenRangoInicio, state.despachoResumenRangoFin);
+  const metrica = state.despachoResumenTipo==="todos" ? "conteo" : state.despachoResumenMetrica;
   const url = despachoChartInstance.toBase64Image("image/png", 1);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `grafico_despachos_${state.despachoResumenTipo}_${state.despachoResumenChartType}_${desde}_a_${hasta}.png`;
+  a.download = `grafico_despachos_${state.despachoResumenTipo}_${metrica}_${state.despachoResumenChartType}_${desde}_a_${hasta}.png`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -1532,6 +1553,7 @@ function renderDespachos(){
 function renderDespachoResumen(){
   const [desde,hasta] = computeDateRange(state.despachoResumenModo, state.despachoResumenFecha, state.despachoResumenMes, state.despachoResumenRangoInicio, state.despachoResumenRangoFin);
   const tipoFiltro = state.despachoResumenTipo;
+  const metrica = tipoFiltro==="todos" ? "conteo" : state.despachoResumenMetrica;
   let despachos = state.despachos.filter(d=>d.fecha>=desde && d.fecha<=hasta);
   if(tipoFiltro!=="todos") despachos = despachos.filter(d=>d.tipo===tipoFiltro);
   const totCosecha = despachos.filter(d=>d.tipo==="cosecha").reduce((a,d)=>a+(Number(d.toneladas)||0),0);
@@ -1561,6 +1583,15 @@ function renderDespachoResumen(){
         <div class="hint">Cosecha y Aserrinco manejan productos distintos, por eso no se mezclan en un mismo gráfico.</div>
       </div>
 
+      ${tipoFiltro!=="todos" ? `
+      <div class="field">
+        <label>Métrica del gráfico</label>
+        <div class="chart-tabs">
+          <button class="chart-tab ${metrica==="conteo"?"active":""}" data-metrica="conteo"># Despachos</button>
+          <button class="chart-tab ${metrica==="cantidad"?"active":""}" data-metrica="cantidad">${tipoFiltro==="cosecha"?"Toneladas":"Unidades"}</button>
+        </div>
+      </div>` : ""}
+
       <div class="stat-row">
         <div class="stat-card"><div class="n">${despachos.length}</div><div class="l">Despachos · ${clientes} cliente${clientes!==1?"s":""}</div></div>
         ${tipoFiltro==="cosecha" ? `
@@ -1587,7 +1618,10 @@ function renderDespachoResumen(){
           </select>
           ${tipoFiltro==="todos" ? `<div class="hint">Para agrupar por Producto, elige primero Cosecha o Aserrinco arriba.</div>` : ""}
         </div>` : `
-        <p style="font-size:12px; color:var(--ink-soft); margin:14px 0 0;">${state.despachoResumenModo==="dia" ? "Cantidad de despachos por día, últimos 7 días." : "Cantidad de despachos por día, dentro del periodo elegido."}</p>`}
+        <p style="font-size:12px; color:var(--ink-soft); margin:14px 0 0;">${(()=>{
+          const cosa = metrica==="cantidad" ? (tipoFiltro==="cosecha"?"Toneladas":"Unidades") : "Cantidad de despachos";
+          return state.despachoResumenModo==="dia" ? `${cosa} por día, últimos 7 días.` : `${cosa} por día, dentro del periodo elegido.`;
+        })()}</p>`}
         <div style="height:220px; margin-top:16px;">
           <canvas id="despachoResumenChart"></canvas>
         </div>
@@ -1908,6 +1942,7 @@ function bind(){
       state.despachoResumenFecha = new Date().toISOString().slice(0,10);
       state.despachoResumenModo = "dia";
       state.despachoResumenTipo = "todos";
+      state.despachoResumenMetrica = "conteo";
       state.view = "despachoResumen";
       render();
     };
@@ -1930,8 +1965,12 @@ function bind(){
         // (Producto no existe en "Todos"; Tipo no tiene sentido en un tipo ya fijo).
         if(state.despachoResumenTipo==="todos" && state.despachoResumenChartGroup==="producto") state.despachoResumenChartGroup = "cliente";
         if(state.despachoResumenTipo!=="todos" && state.despachoResumenChartGroup==="tipo") state.despachoResumenChartGroup = "cliente";
+        state.despachoResumenMetrica = "conteo";
         render();
       };
+    });
+    document.querySelectorAll("[data-metrica]").forEach(btn=>{
+      btn.onclick = ()=>{ state.despachoResumenMetrica = btn.dataset.metrica; render(); };
     });
     document.querySelectorAll("[data-despchart]").forEach(btn=>{
       btn.onclick = ()=>{ state.despachoResumenChartType = btn.dataset.despchart; render(); };
