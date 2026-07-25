@@ -2130,8 +2130,9 @@ function bind(){
     document.getElementById("btnDespachoResumen").onclick = ()=>{
       state.despachoResumenFecha = new Date().toISOString().slice(0,10);
       state.despachoResumenModo = "dia";
-      state.despachoResumenTipo = "todos";
-      state.despachoResumenMetrica = "conteo";
+      state.despachoResumenTipo = "cosecha";
+      state.despachoResumenChartGroup = "producto";
+      state.despachoResumenMetrica = "cantidad";
       state.view = "despachoResumen";
       render();
     };
@@ -2150,11 +2151,17 @@ function bind(){
     document.querySelectorAll("[data-tipofiltro]").forEach(btn=>{
       btn.onclick = ()=>{
         state.despachoResumenTipo = btn.dataset.tipofiltro;
-        // Evita quedar con una agrupación que ya no aplica al nuevo filtro
-        // (Producto no existe en "Todos"; Tipo no tiene sentido en un tipo ya fijo).
-        if(state.despachoResumenTipo==="todos" && state.despachoResumenChartGroup==="producto") state.despachoResumenChartGroup = "cliente";
-        if(state.despachoResumenTipo!=="todos" && state.despachoResumenChartGroup==="tipo") state.despachoResumenChartGroup = "cliente";
-        state.despachoResumenMetrica = "conteo";
+        if(state.despachoResumenTipo==="todos"){
+          // "Todos" no puede agrupar por Producto ni mostrar Toneladas/Unidades
+          // juntas (se mezclarían cosecha y aserrinco) — vuelve al conteo por cliente.
+          state.despachoResumenChartGroup = "cliente";
+          state.despachoResumenMetrica = "conteo";
+        } else {
+          // Al elegir un tipo específico, se muestra de una vez lo más pedido:
+          // Toneladas/Unidades agrupadas por Producto.
+          state.despachoResumenChartGroup = "producto";
+          state.despachoResumenMetrica = "cantidad";
+        }
         render();
       };
     });
