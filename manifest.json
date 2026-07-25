@@ -1,6 +1,6 @@
 {
-  "name": "Cosechas",
-  "short_name": "Cosechas",
+  "name": "Veta",
+  "short_name": "Veta",
   "description": "Registro de cosecha de madera",
   "start_url": "./index.html",
   "scope": "./",
