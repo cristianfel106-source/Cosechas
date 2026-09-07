@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventario de estacones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --bg:#F2F3F6;
+    --surface:#FFFFFF;
+    --ink:#181A20;
+    --ink-soft:#767C8A;
+    --border:#E8E9ED;
+    --accent:#FF6A1A;
+    --accent-soft:#FFE7D6;
+    --ok:#1A9E5C;
+    --ok-soft:#DFF5EA;
+    --warn:#E2483A;
+    --warn-soft:#FCE1DE;
+    --shadow:0 4px 14px rgba(24,26,32,.06);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Inter',sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif;font-weight:600;margin:0;}
+  .app{max-width:720px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
+  header.top{
+    padding:22px 18px 14px;
+    position:sticky;top:0;background:var(--bg);z-index:5;
+    display:flex;justify-content:space-between;align-items:flex-start;
+  }
+  header.top h1{font-size:23px;}
+  header.top p{margin:4px 0 0;color:var(--ink-soft);font-size:13px;}
+  header.top .addbtn{
+    width:44px;height:44px;border-radius:14px;background:var(--accent);
+    color:#fff;border:none;font-size:22px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;flex:none;box-shadow:var(--shadow);
+  }
+  nav.tabs{display:none;}
+  main{flex:1;padding:0 16px;padding-bottom:100px;}
+  section{display:none;}
+  section.active{display:block;}
+  .searchbar{
+    display:flex;gap:8px;margin-bottom:14px;
+  }
+  input,select,textarea{
+    font-family:'Inter',sans-serif;
+    font-size:15px;
+    padding:12px 14px;
+    border:1px solid var(--border);
+    border-radius:12px;
+    background:var(--surface);
+    color:var(--ink);
+    width:100%;
+  }
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent);}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+  .chip{
+    padding:7px 14px;border-radius:20px;border:1px solid var(--border);
+    background:var(--surface);font-size:13px;font-weight:500;color:var(--ink-soft);cursor:pointer;white-space:nowrap;
+  }
+  .chip.active{background:var(--ink);border-color:var(--ink);color:#fff;}
+  .card{
+    background:var(--surface);
+    border:none;
+    border-radius:16px;
+    padding:14px 16px;
+    margin-bottom:12px;
+    box-shadow:var(--shadow);
+    position:relative;
+  }
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+  .card-top h3{font-size:17px;color:var(--ink);}
+  .card-meta{font-size:12px;color:var(--ink-soft);margin-top:3px;}
+  .tag{
+    font-size:11px;padding:4px 10px;border-radius:20px;white-space:nowrap;font-weight:600;
+  }
+  .tag.green{background:var(--ok-soft);color:var(--ok);}
+  .tag.warn{background:var(--warn-soft);color:var(--warn);}
+  .card-body{margin-top:10px;font-size:13px;color:var(--ink-soft);line-height:1.5;}
+  .card-body b{color:var(--ink);font-weight:600;font-size:15px;}
+  .card-actions{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;}
+  button{
+    font-family:'Inter',sans-serif;
+    font-size:13px;font-weight:600;
+    padding:9px 14px;border-radius:10px;border:1px solid var(--border);
+    background:var(--surface);color:var(--ink);cursor:pointer;
+  }
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  button.ghost{background:transparent;border-color:transparent;color:var(--warn);padding:9px 6px;}
+  button.small{padding:7px 11px;font-size:12px;}
+  .fab{display:none;}
+  nav.bottom{
+    position:fixed;bottom:14px;left:16px;right:16px;
+    background:var(--ink);border-radius:20px;
+    display:flex;max-width:688px;margin:0 auto;z-index:6;
+    box-shadow:0 6px 20px rgba(24,26,32,.25);padding:6px;
+  }
+  nav.bottom .navbtn{
+    flex:1;text-align:center;padding:10px 4px;font-size:11px;font-weight:600;
+    color:rgba(255,255,255,.6);border:none;background:none;cursor:pointer;border-radius:14px;
+  }
+  nav.bottom .navbtn.active{color:#fff;background:rgba(255,255,255,.12);}
+  .empty{
+    text-align:center;color:var(--ink-soft);padding:44px 16px;font-size:14px;
+    background:var(--surface);border-radius:16px;
+  }
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(24,26,32,.5);
+    display:none;align-items:flex-end;justify-content:center;z-index:20;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal{
+    background:var(--bg);width:100%;max-width:720px;
+    border-radius:24px 24px 0 0;padding:22px 18px 30px;
+    max-height:88vh;overflow-y:auto;
+  }
+  .modal h2{font-size:19px;margin-bottom:16px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:13px;color:var(--ink-soft);margin-bottom:6px;font-weight:500;}
+  .field-row{display:flex;gap:10px;}
+  .field-row .field{flex:1;}
+  .modal-actions{display:flex;gap:10px;margin-top:16px;}
+  .modal-actions button{flex:1;padding:13px;border-radius:12px;}
+  .error-text{color:var(--warn);font-size:12px;margin-top:4px;display:none;}
+  .banner{
+    background:var(--warn-soft);color:var(--warn);border-radius:12px;
+    padding:12px 14px;font-size:13px;margin-bottom:14px;
+  }
+  .summary-row{display:flex;gap:10px;margin-bottom:16px;}
+  .summary-card{
+    flex:1;background:var(--surface);border-radius:16px;padding:14px 8px;text-align:center;
+    box-shadow:var(--shadow);
+  }
+  .summary-card .num{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700;color:var(--ink);}
+  .summary-card .lbl{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+  .qr-box{
+    background:#fff;border-radius:16px;box-shadow:var(--shadow);
+    padding:18px;display:flex;flex-direction:column;align-items:center;gap:10px;
+  }
+  .qr-box .label-text{text-align:center;font-size:13px;color:var(--ink);line-height:1.6;}
+  .qr-box .label-code{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:var(--accent);}
+  #scanVideo{width:100%;border-radius:16px;background:#000;max-height:280px;object-fit:cover;}
+  .scan-result{margin-top:14px;}
+  .scan-status{font-size:13px;color:var(--ink-soft);margin-top:8px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1 id="headerTitle">Inventario de estacones</h1>
+      <p id="headerSub">Cargando datos compartidos del equipo...</p>
+    </div>
+    <button class="addbtn" id="fabBtn" aria-label="Agregar">+</button>
+  </header>
+
+  <main>
+
+    <section id="sec-inventario">
+      <div class="summary-row" id="summaryRow"></div>
+      <div class="searchbar">
+        <input type="text" id="searchInput" placeholder="Buscar por código, zona o medida">
+      </div>
+      <div class="chips" id="tipoChips"></div>
+      <div class="chips" id="zoneChips"></div>
+      <div id="loteList"></div>
+    </section>
+
+    <section id="sec-movimientos">
+      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">Registro de entradas y salidas de estacones.</p>
+      <div id="movList"></div>
+    </section>
+
+    <section id="sec-alertas">
+      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:6px;">Referencias que llevan más tiempo en bodega, para priorizar su salida.</p>
+      <div class="field" style="max-width:220px;margin-bottom:12px;">
+        <label for="umbralDias">Marcar como antigua después de (días)</label>
+        <input type="number" id="umbralDias" value="180" min="1">
+      </div>
+      <div id="alertList"></div>
+    </section>
+
+    <section id="sec-escanear">
+      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;">Escanea el código QR pegado junto a la pila de estacones, o escribe el código manualmente.</p>
+      <button class="primary" id="startScanBtn" style="width:100%;margin-bottom:10px;">Activar cámara</button>
+      <video id="scanVideo" playsinline style="display:none;"></video>
+      <canvas id="scanCanvas" style="display:none;"></canvas>
+      <div class="scan-status" id="scanStatus"></div>
+      <div class="field" style="margin-top:14px;">
+        <label for="manualCodeInput">O escribe el código de la referencia</label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="manualCodeInput" placeholder="Ej: L-4F2A9">
+          <button id="manualCodeBtn">Buscar</button>
+        </div>
+      </div>
+      <div class="scan-result" id="scanResult"></div>
+    </section>
+
+  </main>
+
+  <nav class="bottom">
+    <button class="navbtn active" data-tab="inventario">Inventario</button>
+    <button class="navbtn" data-tab="movimientos">Movim.</button>
+    <button class="navbtn" data-tab="alertas">Alertas</button>
+    <button class="navbtn" data-tab="escanear">Escanear</button>
+  </nav>
+</div>
+
+<div class="modal-overlay" id="loteModalOverlay">
+  <div class="modal">
+    <h2 id="loteModalTitle">Nueva referencia</h2>
+    <input type="hidden" id="loteId">
+    <div class="field">
+      <label for="loteTipoSelect">Tipo de estacón</label>
+      <select id="loteTipoSelect">
+        <option value="Estacón inmunizado con punta">Estacón inmunizado con punta</option>
+        <option value="Estacón inmunizado sin punta">Estacón inmunizado sin punta</option>
+      </select>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="loteLargo">Largo (m)</label>
+        <input type="number" id="loteLargo" placeholder="Ej: 2.4" min="0" step="0.01">
+        <div class="error-text" id="err-loteLargo">Ingresa el largo.</div>
+      </div>
+      <div class="field">
+        <label for="loteDiametro">Diámetro (cm)</label>
+        <input type="number" id="loteDiametro" placeholder="Ej: 8" min="0" step="0.1">
+        <div class="error-text" id="err-loteDiametro">Ingresa el diámetro.</div>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="loteCantidad">Cantidad actual</label>
+        <input type="number" id="loteCantidad" placeholder="0" min="0" step="1">
+        <div class="error-text" id="err-loteCantidad">Ingresa una cantidad válida.</div>
+      </div>
+      <div class="field">
+        <label for="loteUnidad">Unidad</label>
+        <select id="loteUnidad">
+          <option value="unidades">Unidades</option>
+          <option value="m3">m³</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="loteZona">Zona / ubicación</label>
+      <input type="text" id="loteZona" placeholder="Ej: Patio A, Bodega 2" list="zonaOptions">
+      <datalist id="zonaOptions"></datalist>
+      <div class="error-text" id="err-loteZona">Indica dónde está ubicada la pila.</div>
+    </div>
+    <div class="field">
+      <label for="loteEstado">Estado</label>
+      <select id="loteEstado">
+        <option value="buena">Buena</option>
+        <option value="deteriorada">Deteriorada</option>
+        <option value="sin_verificar">Sin verificar</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="loteFecha">Fecha de ingreso</label>
+      <input type="date" id="loteFecha">
+      <div class="error-text" id="err-loteFecha">Indica la fecha de ingreso.</div>
+    </div>
+    <div class="field">
+      <label for="loteNotas">Notas (opcional)</label>
+      <textarea id="loteNotas" rows="2" placeholder="Cualquier detalle adicional"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button id="loteCancelBtn">Cancelar</button>
+      <button class="primary" id="loteSaveBtn">Guardar referencia</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="movModalOverlay">
+  <div class="modal">
+    <h2>Registrar movimiento</h2>
+    <input type="hidden" id="movLoteId">
+    <div class="field">
+      <label for="movLoteSelect">Referencia</label>
+      <select id="movLoteSelect"></select>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="movTipo">Tipo de movimiento</label>
+        <select id="movTipo">
+          <option value="entrada">Entrada</option>
+          <option value="salida">Salida</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="movCantidad">Cantidad</label>
+        <input type="number" id="movCantidad" min="0" step="1" placeholder="0">
+        <div class="error-text" id="err-movCantidad">Ingresa una cantidad válida.</div>
+      </div>
+    </div>
+    <div class="field">
+      <label for="movResponsable">Responsable</label>
+      <input type="text" id="movResponsable" placeholder="Nombre de quien registra">
+      <div class="error-text" id="err-movResponsable">Indica quién hizo el movimiento.</div>
+    </div>
+    <div class="field">
+      <label for="movNota">Nota (opcional)</label>
+      <input type="text" id="movNota" placeholder="Ej: Salida para pedido cliente X">
+    </div>
+    <div class="modal-actions">
+      <button id="movCancelBtn">Cancelar</button>
+      <button class="primary" id="movSaveBtn">Guardar movimiento</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="qrModalOverlay">
+  <div class="modal">
+    <h2>Código para imprimir</h2>
+    <div class="qr-box" id="qrBoxContent"></div>
+    <p style="font-size:12px;color:var(--text-secondary);text-align:center;margin-top:10px;">Imprime o toma captura de esta pantalla y pégala junto a la pila de estacones correspondiente.</p>
+    <div class="modal-actions">
+      <button id="qrCloseBtn" style="flex:none;margin:0 auto;">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCCWR2dsAbtae66Bbv3ycABD0Pgb6iMAwY",
+  authDomain: "inventario-madera.firebaseapp.com",
+  databaseURL: "https://inventario-madera-default-rtdb.firebaseio.com",
+  projectId: "inventario-madera",
+  storageBucket: "inventario-madera.firebasestorage.app",
+  messagingSenderId: "621817604762",
+  appId: "1:621817604762:web:5859ad3057adc2b124cd23"
+};
+firebase.initializeApp(firebaseConfig);
+const dbRef = firebase.database().ref('aserrio-data');
+
+let data = { lotes: [], movimientos: [] };
+let currentTab = 'inventario';
+let activeZoneFilter = null;
+let activeTipoFilter = null;
+let dataLoaded = false;
+let scanStream = null;
+let scanRAF = null;
+
+const TIPOS = ['Estacón inmunizado con punta', 'Estacón inmunizado sin punta'];
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function daysSince(dateStr){
+  const d1 = new Date(dateStr); const d2 = new Date();
+  return Math.floor((d2 - d1) / (1000*60*60*24));
+}
+function fmtNum(n){
+  return Number(n).toLocaleString('es-CO', {maximumFractionDigits:2});
+}
+function unidadLabel(u){
+  return u === 'm3' ? 'm³' : 'unid.';
+}
+function estadoLabel(e){
+  return e === 'buena' ? 'Buena' : (e === 'deteriorada' ? 'Deteriorada' : 'Sin verificar');
+}
+function medidaLabel(l){
+  return `${fmtNum(l.largo)} m x ${fmtNum(l.diametro)} cm`;
+}
+
+function loadData(){
+  dbRef.on('value', (snapshot) => {
+    const val = snapshot.val();
+    data = val || { lotes: [], movimientos: [] };
+    dataLoaded = true;
+    document.getElementById('headerSub').textContent = 'Datos compartidos con el equipo de logística';
+    renderAll();
+  }, (error) => {
+    document.getElementById('headerSub').textContent = 'No se pudo conectar a la base de datos. Revisa tu conexión.';
+  });
+}
+
+async function saveData(){
+  try{
+    await dbRef.set(data);
+  }catch(e){
+    alert('No se pudo guardar. Revisa tu conexión e intenta de nuevo.');
+  }
+}
+
+function switchTab(tab){
+  if(currentTab === 'escanear' && tab !== 'escanear') stopScan();
+  currentTab = tab;
+  document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('sec-'+tab).classList.add('active');
+  document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  const titles = {inventario:'Inventario de estacones', movimientos:'Movimientos', alertas:'Referencias antiguas', escanear:'Escanear código'};
+  document.getElementById('headerTitle').textContent = titles[tab];
+  document.getElementById('fabBtn').style.visibility = (tab === 'alertas' || tab === 'escanear') ? 'hidden' : 'visible';
+  renderAll();
+}
+
+function getZonas(){
+  const set = new Set(data.lotes.map(l => l.zona).filter(Boolean));
+  return Array.from(set).sort();
+}
+
+function renderSummary(){
+  const totalLotes = data.lotes.length;
+  const totalCantidad = data.lotes.reduce((s,l)=>s+Number(l.cantidad||0),0);
+  const umbral = Number(document.getElementById('umbralDias').value || 180);
+  const antiguos = data.lotes.filter(l => daysSince(l.fechaIngreso) >= umbral).length;
+  document.getElementById('summaryRow').innerHTML = `
+    <div class="summary-card"><div class="num">${totalLotes}</div><div class="lbl">Referencias</div></div>
+    <div class="summary-card"><div class="num">${fmtNum(totalCantidad)}</div><div class="lbl">Cantidad total</div></div>
+    <div class="summary-card"><div class="num">${antiguos}</div><div class="lbl">Referencias antiguas</div></div>
+  `;
+}
+
+function renderTipoChips(){
+  const cont = document.getElementById('tipoChips');
+  cont.innerHTML = `<div class="chip ${activeTipoFilter===null?'active':''}" data-tipo="">Ambos tipos</div>` +
+    TIPOS.map(t => `<div class="chip ${activeTipoFilter===t?'active':''}" data-tipo="${t}">${t.replace('Estacón inmunizado ','')}</div>`).join('');
+  cont.querySelectorAll('.chip').forEach(c=>{
+    c.addEventListener('click', ()=>{ activeTipoFilter = c.dataset.tipo || null; renderAll(); });
+  });
+}
+
+function renderZoneChips(){
+  const zonas = getZonas();
+  const cont = document.getElementById('zoneChips');
+  if(zonas.length === 0){ cont.innerHTML=''; return; }
+  cont.innerHTML = `<div class="chip ${activeZoneFilter===null?'active':''}" data-zone="">Todas las zonas</div>` +
+    zonas.map(z => `<div class="chip ${activeZoneFilter===z?'active':''}" data-zone="${z}">${z}</div>`).join('');
+  cont.querySelectorAll('.chip').forEach(c=>{
+    c.addEventListener('click', ()=>{
+      activeZoneFilter = c.dataset.zone || null;
+      renderAll();
+    });
+  });
+}
+
+function renderLotes(){
+  const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+  const umbral = Number(document.getElementById('umbralDias').value || 180);
+  let lotes = data.lotes.slice().sort((a,b)=> new Date(a.fechaIngreso) - new Date(b.fechaIngreso));
+  if(activeZoneFilter) lotes = lotes.filter(l => l.zona === activeZoneFilter);
+  if(activeTipoFilter) lotes = lotes.filter(l => l.tipo === activeTipoFilter);
+  if(q) lotes = lotes.filter(l =>
+    (l.codigo||'').toLowerCase().includes(q) ||
+    (l.zona||'').toLowerCase().includes(q) ||
+    String(l.largo).includes(q) ||
+    String(l.diametro).includes(q)
+  );
+  const cont = document.getElementById('loteList');
+  if(lotes.length === 0){
+    cont.innerHTML = `<div class="empty">No hay referencias registradas todavía.<br>Usa el botón + para agregar la primera.</div>`;
+    return;
+  }
+  cont.innerHTML = lotes.map(l => {
+    const old = daysSince(l.fechaIngreso) >= umbral;
+    return `
+    <div class="card ${old?'old':''}">
+      <div class="card-top">
+        <div>
+          <h3>${medidaLabel(l)}</h3>
+          <div class="card-meta">${l.tipo} · ${l.zona || 'Sin zona'} · código ${l.codigo}</div>
+        </div>
+        <span class="tag ${old?'warn':'green'}">${old ? 'Antigua' : estadoLabel(l.estado)}</span>
+      </div>
+      <div class="card-body">
+        <b>${fmtNum(l.cantidad)} ${unidadLabel(l.unidad)}</b> · ingresó hace ${daysSince(l.fechaIngreso)} días
+        ${l.notas ? '<br>' + l.notas : ''}
+      </div>
+      <div class="card-actions">
+        <button class="small" data-action="edit" data-id="${l.id}">Editar</button>
+        <button class="small" data-action="mov" data-id="${l.id}">Movimiento</button>
+        <button class="small" data-action="qr" data-id="${l.id}">Ver QR</button>
+        <button class="ghost small" data-action="del" data-id="${l.id}">Eliminar</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  cont.querySelectorAll('[data-action="edit"]').forEach(b=>b.addEventListener('click', ()=>openLoteModal(b.dataset.id)));
+  cont.querySelectorAll('[data-action="mov"]').forEach(b=>b.addEventListener('click', ()=>openMovModal(b.dataset.id)));
+  cont.querySelectorAll('[data-action="qr"]').forEach(b=>b.addEventListener('click', ()=>openQrModal(b.dataset.id)));
+  cont.querySelectorAll('[data-action="del"]').forEach(b=>b.addEventListener('click', ()=>deleteLote(b.dataset.id)));
+}
+
+function renderMovimientos(){
+  const cont = document.getElementById('movList');
+  const movs = data.movimientos.slice().sort((a,b)=> new Date(b.fecha) - new Date(a.fecha));
+  if(movs.length === 0){
+    cont.innerHTML = `<div class="empty">Todavía no hay movimientos registrados.</div>`;
+    return;
+  }
+  cont.innerHTML = movs.map(m => {
+    const lote = data.lotes.find(l => l.id === m.loteId);
+    const nombre = lote ? medidaLabel(lote) + ' · ' + lote.tipo.replace('Estacón inmunizado ','') : '(referencia eliminada)';
+    return `
+    <div class="card" style="border-left-color:${m.tipo==='entrada'?'var(--green)':'var(--accent)'}">
+      <div class="card-top">
+        <div>
+          <h3>${nombre}</h3>
+          <div class="card-meta">${m.fecha} · ${m.responsable}</div>
+        </div>
+        <span class="tag ${m.tipo==='entrada'?'green':'warn'}">${m.tipo==='entrada'?'Entrada':'Salida'}</span>
+      </div>
+      <div class="card-body"><b>${fmtNum(m.cantidad)} ${lote ? unidadLabel(lote.unidad) : ''}</b>${m.nota ? ' · ' + m.nota : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderAlertas(){
+  const umbral = Number(document.getElementById('umbralDias').value || 180);
+  const cont = document.getElementById('alertList');
+  const antiguos = data.lotes
+    .filter(l => daysSince(l.fechaIngreso) >= umbral)
+    .sort((a,b)=> new Date(a.fechaIngreso) - new Date(b.fechaIngreso));
+  if(antiguos.length === 0){
+    cont.innerHTML = `<div class="empty">No hay referencias que superen el umbral de días. Buen control.</div>`;
+    return;
+  }
+  cont.innerHTML = antiguos.map(l => `
+    <div class="card old">
+      <div class="card-top">
+        <div>
+          <h3>${medidaLabel(l)}</h3>
+          <div class="card-meta">${l.tipo} · ${l.zona || 'Sin zona'} · ${daysSince(l.fechaIngreso)} días en bodega</div>
+        </div>
+        <span class="tag warn">Prioridad</span>
+      </div>
+      <div class="card-body"><b>${fmtNum(l.cantidad)} ${unidadLabel(l.unidad)}</b>${l.notas ? ' · ' + l.notas : ''}</div>
+    </div>
+  `).join('');
+}
+
+function renderAll(){
+  if(!dataLoaded){
+    return;
+  }
+  renderSummary();
+  renderTipoChips();
+  renderZoneChips();
+  renderLotes();
+  renderMovimientos();
+  renderAlertas();
+  populateZonaDatalist();
+}
+
+function populateZonaDatalist(){
+  const dl = document.getElementById('zonaOptions');
+  dl.innerHTML = getZonas().map(z => `<option value="${z}">`).join('');
+}
+
+function clearErrors(ids){
+  ids.forEach(id => {
+    const el = document.getElementById('err-'+id);
+    if(el) el.style.display = 'none';
+  });
+}
+function showError(id){
+  const el = document.getElementById('err-'+id);
+  if(el) el.style.display = 'block';
+}
+
+function openLoteModal(id){
+  clearErrors(['loteLargo','loteDiametro','loteCantidad','loteZona','loteFecha']);
+  const overlay = document.getElementById('loteModalOverlay');
+  if(id){
+    const l = data.lotes.find(x=>x.id===id);
+    document.getElementById('loteModalTitle').textContent = 'Editar referencia';
+    document.getElementById('loteId').value = l.id;
+    document.getElementById('loteTipoSelect').value = l.tipo;
+    document.getElementById('loteLargo').value = l.largo;
+    document.getElementById('loteDiametro').value = l.diametro;
+    document.getElementById('loteCantidad').value = l.cantidad;
+    document.getElementById('loteUnidad').value = l.unidad;
+    document.getElementById('loteZona').value = l.zona || '';
+    document.getElementById('loteEstado').value = l.estado;
+    document.getElementById('loteFecha').value = l.fechaIngreso;
+    document.getElementById('loteNotas').value = l.notas || '';
+  } else {
+    document.getElementById('loteModalTitle').textContent = 'Nueva referencia';
+    document.getElementById('loteId').value = '';
+    document.getElementById('loteTipoSelect').value = TIPOS[0];
+    document.getElementById('loteLargo').value = '';
+    document.getElementById('loteDiametro').value = '';
+    document.getElementById('loteCantidad').value = '';
+    document.getElementById('loteUnidad').value = 'unidades';
+    document.getElementById('loteZona').value = activeZoneFilter || '';
+    document.getElementById('loteEstado').value = 'sin_verificar';
+    document.getElementById('loteFecha').value = todayStr();
+    document.getElementById('loteNotas').value = '';
+  }
+  overlay.classList.add('open');
+}
+function closeLoteModal(){
+  document.getElementById('loteModalOverlay').classList.remove('open');
+}
+
+function saveLote(){
+  const largo = document.getElementById('loteLargo').value;
+  const diametro = document.getElementById('loteDiametro').value;
+  const cantidad = document.getElementById('loteCantidad').value;
+  const zona = document.getElementById('loteZona').value.trim();
+  const fecha = document.getElementById('loteFecha').value;
+  let valid = true;
+  clearErrors(['loteLargo','loteDiametro','loteCantidad','loteZona','loteFecha']);
+  if(largo === '' || isNaN(largo) || Number(largo) <= 0){ showError('loteLargo'); valid = false; }
+  if(diametro === '' || isNaN(diametro) || Number(diametro) <= 0){ showError('loteDiametro'); valid = false; }
+  if(cantidad === '' || isNaN(cantidad) || Number(cantidad) < 0){ showError('loteCantidad'); valid = false; }
+  if(!zona){ showError('loteZona'); valid = false; }
+  if(!fecha){ showError('loteFecha'); valid = false; }
+  if(!valid) return;
+
+  const id = document.getElementById('loteId').value;
+  const loteData = {
+    tipo: document.getElementById('loteTipoSelect').value,
+    largo: Number(largo),
+    diametro: Number(diametro),
+    cantidad: Number(cantidad),
+    unidad: document.getElementById('loteUnidad').value,
+    zona,
+    estado: document.getElementById('loteEstado').value,
+    fechaIngreso: fecha,
+    notas: document.getElementById('loteNotas').value.trim()
+  };
+  if(id){
+    const idx = data.lotes.findIndex(l=>l.id===id);
+    data.lotes[idx] = { ...data.lotes[idx], ...loteData };
+  } else {
+    loteData.id = uid();
+    loteData.codigo = 'L-' + loteData.id.slice(-5).toUpperCase();
+    data.lotes.push(loteData);
+  }
+  saveData();
+  closeLoteModal();
+  renderAll();
+}
+
+function deleteLote(id){
+  if(!confirm('¿Eliminar esta referencia del inventario? Esta acción no se puede deshacer.')) return;
+  data.lotes = data.lotes.filter(l=>l.id!==id);
+  saveData();
+  renderAll();
+}
+
+function openMovModal(loteId){
+  clearErrors(['movCantidad','movResponsable']);
+  const sel = document.getElementById('movLoteSelect');
+  sel.innerHTML = data.lotes.map(l => `<option value="${l.id}">${medidaLabel(l)} · ${l.tipo.replace('Estacón inmunizado ','')} (${l.zona||'sin zona'})</option>`).join('');
+  if(loteId) sel.value = loteId;
+  document.getElementById('movTipo').value = 'entrada';
+  document.getElementById('movCantidad').value = '';
+  document.getElementById('movResponsable').value = '';
+  document.getElementById('movNota').value = '';
+  document.getElementById('movModalOverlay').classList.add('open');
+}
+function closeMovModal(){
+  document.getElementById('movModalOverlay').classList.remove('open');
+}
+
+function saveMov(){
+  const loteId = document.getElementById('movLoteSelect').value;
+  const cantidad = document.getElementById('movCantidad').value;
+  const responsable = document.getElementById('movResponsable').value.trim();
+  let valid = true;
+  clearErrors(['movCantidad','movResponsable']);
+  if(cantidad === '' || isNaN(cantidad) || Number(cantidad) <= 0){ showError('movCantidad'); valid = false; }
+  if(!responsable){ showError('movResponsable'); valid = false; }
+  if(!data.lotes.length){ alert('Primero registra al menos una referencia.'); return; }
+  if(!valid) return;
+
+  const tipo = document.getElementById('movTipo').value;
+  const lote = data.lotes.find(l=>l.id===loteId);
+  if(lote){
+    if(tipo === 'entrada') lote.cantidad = Number(lote.cantidad) + Number(cantidad);
+    else lote.cantidad = Math.max(0, Number(lote.cantidad) - Number(cantidad));
+  }
+  data.movimientos.push({
+    id: uid(),
+    loteId,
+    tipo,
+    cantidad: Number(cantidad),
+    responsable,
+    nota: document.getElementById('movNota').value.trim(),
+    fecha: todayStr()
+  });
+  saveData();
+  closeMovModal();
+  renderAll();
+}
+
+function openQrModal(id){
+  const l = data.lotes.find(x=>x.id===id);
+  const box = document.getElementById('qrBoxContent');
+  box.innerHTML = '';
+  const qrDiv = document.createElement('div');
+  box.appendChild(qrDiv);
+  new QRCode(qrDiv, { text: l.codigo, width: 180, height: 180, colorDark:'#2A2318', colorLight:'#ffffff' });
+  const info = document.createElement('div');
+  info.className = 'label-text';
+  info.innerHTML = `<div class="label-code">${l.codigo}</div>${l.tipo}<br>${medidaLabel(l)}<br>${l.zona || ''}`;
+  box.appendChild(info);
+  document.getElementById('qrModalOverlay').classList.add('open');
+}
+function closeQrModal(){
+  document.getElementById('qrModalOverlay').classList.remove('open');
+}
+
+function showScanResult(codigo){
+  const lote = data.lotes.find(l => l.codigo.toLowerCase() === codigo.toLowerCase().trim());
+  const cont = document.getElementById('scanResult');
+  if(!lote){
+    cont.innerHTML = `<div class="banner">No se encontró ninguna referencia con el código "${codigo}".</div>`;
+    return;
+  }
+  const old = daysSince(lote.fechaIngreso) >= Number(document.getElementById('umbralDias').value || 180);
+  cont.innerHTML = `
+    <div class="card ${old?'old':''}">
+      <div class="card-top">
+        <div>
+          <h3>${medidaLabel(lote)}</h3>
+          <div class="card-meta">${lote.tipo} · ${lote.zona || 'Sin zona'} · código ${lote.codigo}</div>
+        </div>
+        <span class="tag ${old?'warn':'green'}">${old ? 'Antigua' : estadoLabel(lote.estado)}</span>
+      </div>
+      <div class="card-body"><b>${fmtNum(lote.cantidad)} ${unidadLabel(lote.unidad)} disponibles ahora</b></div>
+      <div class="card-actions">
+        <button class="small" data-action="mov" data-id="${lote.id}">Registrar movimiento</button>
+      </div>
+    </div>`;
+  cont.querySelector('[data-action="mov"]').addEventListener('click', ()=>openMovModal(lote.id));
+}
+
+async function startScan(){
+  const video = document.getElementById('scanVideo');
+  const statusEl = document.getElementById('scanStatus');
+  try{
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = scanStream;
+    video.style.display = 'block';
+    await video.play();
+    statusEl.textContent = 'Apunta la cámara al código QR de la referencia.';
+    document.getElementById('startScanBtn').textContent = 'Detener cámara';
+    scanLoop();
+  }catch(e){
+    statusEl.textContent = 'No se pudo activar la cámara en este dispositivo o navegador. Usa la búsqueda manual del código.';
+  }
+}
+
+function stopScan(){
+  if(scanRAF) cancelAnimationFrame(scanRAF);
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+  const video = document.getElementById('scanVideo');
+  video.style.display = 'none';
+  document.getElementById('startScanBtn').textContent = 'Activar cámara';
+}
+
+function scanLoop(){
+  const video = document.getElementById('scanVideo');
+  const canvas = document.getElementById('scanCanvas');
+  if(!scanStream){ return; }
+  if(video.readyState === video.HAVE_ENOUGH_DATA){
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imgData.data, imgData.width, imgData.height);
+    if(code && code.data){
+      document.getElementById('scanStatus').textContent = 'Código detectado: ' + code.data;
+      showScanResult(code.data);
+      stopScan();
+      return;
+    }
+  }
+  scanRAF = requestAnimationFrame(scanLoop);
+}
+
+document.querySelectorAll('.navbtn').forEach(b => b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
+document.getElementById('fabBtn').addEventListener('click', ()=>{
+  if(currentTab === 'movimientos') openMovModal(null);
+  else openLoteModal(null);
+});
+document.getElementById('searchInput').addEventListener('input', renderAll);
+document.getElementById('umbralDias').addEventListener('input', renderAll);
+document.getElementById('loteCancelBtn').addEventListener('click', closeLoteModal);
+document.getElementById('loteSaveBtn').addEventListener('click', saveLote);
+document.getElementById('movCancelBtn').addEventListener('click', closeMovModal);
+document.getElementById('movSaveBtn').addEventListener('click', saveMov);
+document.getElementById('qrCloseBtn').addEventListener('click', closeQrModal);
+document.getElementById('startScanBtn').addEventListener('click', ()=>{ scanStream ? stopScan() : startScan(); });
+document.getElementById('manualCodeBtn').addEventListener('click', ()=>{
+  const v = document.getElementById('manualCodeInput').value.trim();
+  if(v) showScanResult(v);
+});
+
+loadData();
+</script>
+</body>
+</html>
