@@ -274,9 +274,8 @@
     <div class="field">
       <label for="loteEstado">Estado</label>
       <select id="loteEstado">
-        <option value="buena">Buena</option>
-        <option value="deteriorada">Deteriorada</option>
-        <option value="sin_verificar">Sin verificar</option>
+        <option value="A">A</option>
+        <option value="B">B</option>
       </select>
     </div>
     <div class="field">
@@ -384,7 +383,7 @@ function unidadLabel(u){
   return u === 'm3' ? 'm³' : 'unid.';
 }
 function estadoLabel(e){
-  return e === 'buena' ? 'Buena' : (e === 'deteriorada' ? 'Deteriorada' : 'Sin verificar');
+  return e === 'A' ? 'A' : 'B';
 }
 function medidaLabel(l){
   return `${fmtNum(l.largo)} m x ${fmtNum(l.diametro)} cm`;
@@ -661,7 +660,7 @@ function openLoteModal(id){
     document.getElementById('loteCantidad').value = '';
     document.getElementById('loteUnidad').value = 'unidades';
     document.getElementById('loteZona').value = activeZoneFilter || '';
-    document.getElementById('loteEstado').value = 'sin_verificar';
+    document.getElementById('loteEstado').value = 'A';
     document.getElementById('loteFecha').value = todayStr();
     document.getElementById('loteNotas').value = '';
   }
