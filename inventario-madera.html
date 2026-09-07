@@ -810,7 +810,14 @@ async function startScan(){
   const video = document.getElementById('scanVideo');
   const statusEl = document.getElementById('scanStatus');
   try{
-    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    try{
+      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
+    }catch(innerErr){
+      scanStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    }
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('muted', 'true');
+    video.muted = true;
     video.srcObject = scanStream;
     video.style.display = 'block';
     await video.play();
@@ -818,7 +825,7 @@ async function startScan(){
     document.getElementById('startScanBtn').textContent = 'Detener cámara';
     scanLoop();
   }catch(e){
-    statusEl.textContent = 'No se pudo activar la cámara en este dispositivo o navegador. Usa la búsqueda manual del código.';
+    statusEl.textContent = 'No se pudo activar la cámara en este dispositivo o navegador. Revisa los permisos de cámara en Ajustes > Safari, o usa la búsqueda manual del código.';
   }
 }
 
