@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inventario-estacones-v1';
+const CACHE_NAME = 'inventario-estacones-v2';
 const APP_SHELL = [
   './inventario-madera.html'
 ];
@@ -21,6 +21,21 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
+  const isHtml = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
+
+  if(isHtml){
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(req).then((cached) => {
       const network = fetch(req)
