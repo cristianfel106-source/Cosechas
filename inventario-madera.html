@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#FF6A1A">
+<link rel="manifest" href="manifest-inventario.json">
 <title>Inventario de estacones</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -47,6 +49,12 @@
     color:#fff;border:none;font-size:22px;display:flex;align-items:center;justify-content:center;
     cursor:pointer;flex:none;box-shadow:var(--shadow);
   }
+  .conn-banner{
+    display:none;background:var(--warn-soft);color:var(--warn);
+    font-size:12px;font-weight:600;padding:8px 12px;border-radius:10px;margin:0 0 12px;
+  }
+  .conn-banner.show{display:block;}
+  .conn-banner.synced{background:var(--ok-soft);color:var(--ok);}
   nav.tabs{display:none;}
   main{flex:1;padding:0 16px;padding-bottom:100px;}
   section{display:none;}
@@ -167,6 +175,8 @@
   </header>
 
   <main>
+    <div class="conn-banner" id="connBanner"></div>
+
 
     <section id="sec-inventario">
       <div class="summary-row" id="summaryRow"></div>
@@ -348,6 +358,10 @@ firebase.initializeApp(firebaseConfig);
 const dbRef = firebase.database().ref('aserrio-data');
 
 let data = { lotes: [], movimientos: [] };
+let isOnline = true;
+let hasPending = localStorage.getItem('inventario-estacones-pending') === '1';
+const BACKUP_KEY = 'inventario-estacones-backup';
+const PENDING_KEY = 'inventario-estacones-pending';
 let currentTab = 'inventario';
 let activeZoneFilter = null;
 let activeTipoFilter = null;
@@ -376,23 +390,73 @@ function medidaLabel(l){
   return `${fmtNum(l.largo)} m x ${fmtNum(l.diametro)} cm`;
 }
 
+function updateConnBanner(){
+  const el = document.getElementById('connBanner');
+  if(!isOnline){
+    el.textContent = 'Sin conexión: lo que registres se guarda en este dispositivo y se sincroniza al volver la señal.';
+    el.className = 'conn-banner show';
+  } else if(hasPending){
+    el.textContent = 'Conexión recuperada: sincronizando los cambios guardados...';
+    el.className = 'conn-banner show';
+  } else {
+    el.className = 'conn-banner';
+  }
+}
+
 function loadData(){
+  const backup = localStorage.getItem(BACKUP_KEY);
+  if(backup){
+    try{
+      data = JSON.parse(backup);
+      dataLoaded = true;
+      renderAll();
+    }catch(e){}
+  }
+
+  firebase.database().ref('.info/connected').on('value', (snap) => {
+    isOnline = snap.val() === true;
+    document.getElementById('headerSub').textContent = isOnline
+      ? 'Datos compartidos con el equipo de logística'
+      : 'Sin conexión — mostrando la última copia guardada';
+    updateConnBanner();
+    if(isOnline && hasPending){
+      dbRef.set(data).then(() => {
+        hasPending = false;
+        localStorage.removeItem(PENDING_KEY);
+        updateConnBanner();
+      });
+    }
+  });
+
   dbRef.on('value', (snapshot) => {
+    if(hasPending) return;
     const val = snapshot.val();
     data = val || { lotes: [], movimientos: [] };
+    localStorage.setItem(BACKUP_KEY, JSON.stringify(data));
     dataLoaded = true;
-    document.getElementById('headerSub').textContent = 'Datos compartidos con el equipo de logística';
     renderAll();
-  }, (error) => {
-    document.getElementById('headerSub').textContent = 'No se pudo conectar a la base de datos. Revisa tu conexión.';
+  }, () => {
+    document.getElementById('headerSub').textContent = 'Sin conexión — mostrando la última copia guardada';
   });
 }
 
 async function saveData(){
+  localStorage.setItem(BACKUP_KEY, JSON.stringify(data));
+  if(!isOnline){
+    hasPending = true;
+    localStorage.setItem(PENDING_KEY, '1');
+    updateConnBanner();
+    return;
+  }
   try{
     await dbRef.set(data);
+    hasPending = false;
+    localStorage.removeItem(PENDING_KEY);
+    updateConnBanner();
   }catch(e){
-    alert('No se pudo guardar. Revisa tu conexión e intenta de nuevo.');
+    hasPending = true;
+    localStorage.setItem(PENDING_KEY, '1');
+    updateConnBanner();
   }
 }
 
@@ -806,6 +870,12 @@ document.getElementById('manualCodeBtn').addEventListener('click', ()=>{
 });
 
 loadData();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw-inventario.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
